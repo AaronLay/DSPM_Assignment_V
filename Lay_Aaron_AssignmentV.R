@@ -22,9 +22,6 @@ venues_grmny <- GET(url = "https://app.ticketmaster.com/discovery/v2/venues?",
                                  locale = '*',
                                  apikey = key))
 
-total_pages = content(venues_grmny)$page$totalPages
-
-
 venue_data <- jsonlite::fromJSON(content(venues_grmny,as = "text"))[["_embedded"]]$venues  %>% select(name,city,postalCode,address,url,location)
 
 venue_data[,2] <- venue_data[,2]
@@ -36,12 +33,23 @@ colnames(venue_data) <- c("name","city","postalCode","address","url","longitude"
 glimpse(venue_data)
 
 
-"
+
 # Task 4
 
-test <-content(venues_grmny)
+size = 250
 
-n = 5950
+total_pages = content(GET(url = "https://app.ticketmaster.com/discovery/v2/venues?",
+                          query = list(countryCode = "DE",
+                                       locale = '*',
+                                       apikey = key,
+                                       size = 250)))$page$totalPages
+
+#n = size * total_pages
+n = content(GET(url = "https://app.ticketmaster.com/discovery/v2/venues?",
+                query = list(countryCode = "DE",
+                             locale = '*',
+                             apikey = key,
+                             size = 250)))$page$totalElements
 
 venue_data_complete <- 
   data.frame(
@@ -51,26 +59,46 @@ venue_data_complete <-
     adress = character(n),
     url = character(n),
     longitude = character(n),
-    latitude = character(n))
+    latitude = character(n),
+    stringsAsFactors = FALSE)
 
 
-for (i in 1:238){
+for (i in 0:(total_pages-1)){
   
-  venues_grmny <- GET(url = "https://app.ticketmaster.com/discovery/v2/venues.json?", 
-                      query = list(countryCode = "DE", 
-                                   apikey = key, 
-                                   size = 20 ,
-                                   page = i))
-                      
-                      
-  venue_data_complete[((i-1)*20+1):(i*20),] <- jsonlite::fromJSON(content(venues_grmny,as = "text"))[["_embedded"]]$venues  %>% select(name,city,postalCode,address,url,location)
-                      
-                      
+  venues_germany <- GET(url = "https://app.ticketmaster.com/discovery/v2/venues.json?", 
+                        query = list(countryCode = "DE", 
+                                     apikey = key, 
+                                     locale = '*',
+                                     size = size ,
+                                     page = i))
+  if (i < 50){
+    
+    json_raw = jsonlite::fromJSON(content(venues_germany ,as = "text"))[["_embedded"]]$venues  %>% select(name,city,postalCode,address,url,location)
+    
+    json_raw[,2] <- json_raw[,2]
+    json_raw[,4] <- json_raw[,4]
+    json_raw[,6:7] <- json_raw[,6]
+    
+    venue_data_complete[((i*size)+1):((i+1)*size),] <- json_raw
+    
+  } else {
+    
+    json_raw = jsonlite::fromJSON(content(venues_germany ,as = "text"))[["_embedded"]]$venues  %>% select(name,city,postalCode,address,url,location)
+    
+    json_raw[,2] <- json_raw[,2]
+    json_raw[,4] <- json_raw[,4]
+    json_raw[,6:7] <- json_raw[,6]
+    
+    venue_data_complete[((i*size)+1):n,] <- json_raw
+    
+  } 
+  
   Sys.sleep(0.5)
-  
   
 }
 
-"
+
+
+
 
 
