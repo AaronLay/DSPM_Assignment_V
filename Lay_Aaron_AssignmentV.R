@@ -1,7 +1,7 @@
 
 
 rm(list= ls())
-
+ 
 library(httr)
 library(devtools)
 library(jsonlite)
@@ -94,9 +94,10 @@ for (i in 0:(total_pages-1)){
     
   } 
   
-  Sys.sleep(0.5)
+  Sys.sleep(0.2)
   
 }
+
 
 #glimpse(venue_data_complete)
 
