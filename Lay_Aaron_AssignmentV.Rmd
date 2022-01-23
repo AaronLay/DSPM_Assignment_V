@@ -1,0 +1,211 @@
+---
+title: "Lay_Aaron_AssignmentV"
+author: "Aaron Lay"
+date: "10 1 2022"
+output: html_document
+---
+
+The project version history is documented under: https://github.com/AaronLay/DSPM_Assignment_V
+
+```{r  warning= FALSE,error=FALSE, message=FALSE}
+
+library(httr)
+library(devtools)
+library(jsonlite)
+library(dplyr)
+library(ggplot2)
+
+wd = "C:/Users/aaron/Arbeitsplatz/Uni/M.Sc. Data Science/(1) WiSe_21_22/Data Science Project Management/Assignments"
+setwd(wd)
+
+```
+
+The API key is inserted from another .R file 
+```{r warning= FALSE}
+source(paste(wd,"/TickMas_API.R",sep=""))
+```
+
+The first 20 venues in germany are extracted from the API.
+```{r}
+venues_grmny <- GET(url = "https://app.ticketmaster.com/discovery/v2/venues?",
+                    query = list(countryCode = "DE",
+                                 locale = '*',
+                                 apikey = key))
+
+venue_data <- jsonlite::fromJSON(content(venues_grmny,as = "text"))[["_embedded"]]$venues  %>% select(name,city,postalCode,address,url,location)
+
+venue_data[,2] <- venue_data[,2]
+venue_data[,4] <- venue_data[,4]
+venue_data[,6:7] <- venue_data[,6]
+
+colnames(venue_data) <- c("name","city","postalCode","address","url","longitude","latitude")
+
+venue_data$longitude <- as.numeric(venue_data$longitude)
+venue_data$latitude <- as.numeric(venue_data$latitude)
+
+
+
+glimpse(venue_data)
+
+```
+
+
+To be able to addapt the results to diffrent countries, I created in this regard a felxible function.
+
+```{r }
+
+venues_country <-
+  function(countryCode,
+           CountryName,
+           min_long,
+           max_long,
+           min_lat,
+           max_lat) {
+    # The size of a page is defined
+    size = 250
+    
+    # The total number of pages is extracted
+    total_pages = content(GET(
+      url = "https://app.ticketmaster.com/discovery/v2/venues?",
+      query = list(
+        countryCode = countryCode,
+        locale = '*',
+        apikey = key,
+        size = 250
+      )
+    ))$page$totalPages
+    
+    # The total number of elements is extracted
+    n = content(GET(
+      url = "https://app.ticketmaster.com/discovery/v2/venues?",
+      query = list(
+        countryCode = countryCode,
+        locale = '*',
+        apikey = key,
+        size = 250
+      )
+    ))$page$totalElements
+    
+    # An empty data frame is created
+    venue_data_complete <-
+      data.frame(
+        name = character(n),
+        city = character(n),
+        postalCode = character(n),
+        adress = character(n),
+        url = character(n),
+        longitude = character(n),
+        latitude = character(n),
+        stringsAsFactors = FALSE
+      )
+    
+    # For loop that iterates over all pages
+    for (i in 0:(total_pages - 1)) {
+      venues_countryX <-
+        GET(
+          url = "https://app.ticketmaster.com/discovery/v2/venues.json?",
+          query = list(
+            countryCode = countryCode,
+            apikey = key,
+            locale = '*',
+            size = size ,
+            page = i
+          )
+        )
+      if (i < (total_pages - 1)) {
+        json_raw = jsonlite::fromJSON(content(venues_countryX, as = "text"))[["_embedded"]]$venues  %>% select(name, city, postalCode, address, url, location)
+        
+        json_raw[, 2] <- json_raw[, 2]
+        json_raw[, 4] <- json_raw[, 4]
+        json_raw[, 6:7] <- json_raw[, 6]
+        
+        venue_data_complete[((i * size) + 1):((i + 1) * size), ] <-
+          json_raw
+        
+      } else {
+        json_raw = jsonlite::fromJSON(content(venues_countryX, as = "text"))[["_embedded"]]$venues  %>% select(name, city, postalCode, address, url, location)
+        
+        json_raw[, 2] <- json_raw[, 2]
+        json_raw[, 4] <- json_raw[, 4]
+        json_raw[, 6:7] <- json_raw[, 6]
+        
+        venue_data_complete[((i * size) + 1):n, ] <- json_raw
+        
+      }
+      
+      Sys.sleep(0.2)
+      
+    }
+    
+    # The geospial columns is formated to a numeric type
+    venue_data_complete$longitude <-
+      as.numeric(venue_data_complete$longitude)
+    venue_data_complete$latitude <-
+      as.numeric(venue_data_complete$latitude)
+    
+    # Locations outside a predefined are are deleted
+    venue_data_complete$longitude <-
+      ifelse(venue_data_complete$longitude < min_long,
+             NA,
+             venue_data_complete$longitude)
+    venue_data_complete$longitude <-
+      ifelse(venue_data_complete$longitude > max_long,
+             NA,
+             venue_data_complete$longitude)
+    
+    venue_data_complete$latitude <-
+      ifelse(venue_data_complete$latitude < min_lat,
+             NA,
+             venue_data_complete$latitude)
+    venue_data_complete$latitude <-
+      ifelse(venue_data_complete$latitude > max_lat,
+             NA,
+             venue_data_complete$latitude)
+    
+    # The county plot is created
+    ggplot() +
+      geom_polygon(
+        aes(x = long, y = lat, group = group),
+        data = map_data("world", region = CountryName),
+        fill = "grey90",
+        color = "black"
+      ) +
+      geom_point(
+        data = venue_data_complete,
+        aes(x = longitude, y = latitude),
+        alpha = 0.5,
+        size = 0.5,
+        colour = "blue"
+      ) +
+      theme_void() + coord_quickmap() +
+      labs(title = paste("Event locations across ", CountryName),
+           caption = "Source: ticketmaster.com") +
+      theme(
+        title = element_text(
+          size = 8,
+          face = 'bold',
+          hjust = 0.5
+        ),
+        plot.caption = element_text(face = "italic")
+      )
+    
+  }  
+
+```
+
+
+Eventlocations from venues in Germany: 
+
+```{r warning= FALSE}
+venues_country("DE","Germany",5.866944,15.043611,47.271679,55.0846)
+```
+Eventlocations from venues in France: 
+
+```{r  warning= FALSE}
+venues_country("FR","France",-4.783333,8.216667,42.333333,51.083333)
+```
+
+Eventlocations from venues in Norway: 
+```{r  warning= FALSE}
+venues_country("NO","Norway",4.66269,30.94355,58.08878,80.49493)
+```
